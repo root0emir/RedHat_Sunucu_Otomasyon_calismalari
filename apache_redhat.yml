@@ -1,0 +1,58 @@
+---
+- name: Apache HTTP Server Setup and Configuration on Red Hat
+  hosts: webserver
+  become: yes  # run tasks as root
+  
+#  root0emir
+
+  vars:
+    custom_index_file: false  # set to true if you want to upload a custom index.html file
+    index_file_path: /#/#/index.html  # path to your index.html file
+
+  tasks:
+    - name: Update all packages and refresh YUM cache
+      yum:
+        name: '*'
+        state: latest
+        update_cache: yes
+
+    - name: Install Apache HTTP Server
+      yum:
+        name: httpd
+        state: present
+
+    - name: Start and enable Apache HTTP Server
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+
+    - name: Configure SELinux to allow Apache to bind to HTTP port
+      command: setsebool -P httpd_can_network_connect 1
+      ignore_errors: yes 
+
+    - name: Open HTTP traffic in Firewalld
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+      notify: restart firewalld
+
+    - name: Optionally upload a custom index.html (if enabled)
+      when: custom_index_file
+      copy:
+        src: "{{ index_file_path }}"
+        dest: /var/www/html/index.html
+        owner: apache
+        group: apache
+        mode: '0644'
+
+    - name: Ensure correct SELinux context on /var/www/html
+      command: restorecon -Rv /var/www/html
+      ignore_errors: yes
+
+  handlers:
+    - name: Restart firewalld service
+      service:
+        name: firewalld
+        state: restarted
